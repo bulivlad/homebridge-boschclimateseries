@@ -34,13 +34,13 @@
     "url": "https://github.com/bulivlad/homebridge-boschclimateseries/issues"
   },
   "dependencies": {
-    "homebridge": "1.4.1",
     "node-fetch": "^2.6.1",
     "node-persist": "^0.0.11"
   },
   "devDependencies": {
     "@types/node": "17.0.41",
     "typescript": "4.7.3",
-    "rimraf": "^3.0.2"
+    "rimraf": "^3.0.2",
+    "homebridge": "1.4.1"
   }
 }
