@@ -4,7 +4,6 @@ import {
 } from "homebridge";
 import {Constants} from "./util/Constants";
 import {BoschClimateSeriesDynamicPlatform} from "./platform/BoschClimateSeriesDynamicPlatform";
-import {BoschClimateSeriesStaticPlatform} from "./platform/BoschClimateSeriesStaticPlatform";
 
 /*
  * IMPORTANT NOTICE
@@ -32,11 +31,5 @@ let hap: HAP;
 
 export = (api: API) => {
     hap = api.hap;
-
-    //Always import static platform for now as the dynamic implementation is not yet ready
-    if (true) {
-        api.registerPlatform(Constants.PLATFORM_NAME, BoschClimateSeriesStaticPlatform);
-    } else {
-        api.registerPlatform(Constants.PLATFORM_NAME, BoschClimateSeriesDynamicPlatform)
-    }
+    api.registerPlatform(Constants.PLATFORM_NAME, BoschClimateSeriesDynamicPlatform)
 };

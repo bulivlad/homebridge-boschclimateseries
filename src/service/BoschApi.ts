@@ -6,16 +6,17 @@ import {Gateway} from "../model/Gateway";
 import {Constants} from "../util/Constants";
 import storage from "node-persist"
 import {DataManager} from "../util/DataManager";
+import {CustomLogger} from "../util/CustomLogger";
 
 export class BoschApi {
     private token: Token;
-    private readonly log: Logger;
+    private readonly log: CustomLogger;
     private readonly cacheDirectory: string;
 
     constructor(token: Token, log: Logger, cacheDirectory: string) {
         this.cacheDirectory = cacheDirectory
         this.token = token
-        this.log = log
+        this.log = new CustomLogger(log, 'BoschApi');
         storage.initSync({dir: this.cacheDirectory, forgiveParseErrors: true})
     }
 

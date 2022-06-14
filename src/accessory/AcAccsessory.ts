@@ -1,21 +1,15 @@
-import {
-    AccessoryPlugin,
-    Formats,
-    HAP,
-    Logging,
-    Service,
-    Units
-} from "homebridge";
+import {AccessoryPlugin, Formats, HAP, Logging, Service, Units} from "homebridge";
 import {BoschApi} from "../service/BoschApi";
 import {TargetHeaterCoolerStateMapper} from "../mapper/TargetHeaterCoolerStateMapper";
 import {ActiveMapper} from "../mapper/ActiveMapper";
 import {ApplianceService} from "../service/ApplianceService";
 import {CurrentHeaterCoolerStateMapper} from "../mapper/CurrentHeaterCoolerStateMapper";
 import {FanRotationSpeedMapper} from "../mapper/FanRotationSpeedMapper";
+import {CustomLogger, LoggingLevel} from "../util/CustomLogger";
 
 export class AcAccsessory implements AccessoryPlugin {
 
-    private readonly log: Logging;
+    private readonly log: CustomLogger;
     private readonly api: BoschApi;
     private readonly hap: HAP;
     private readonly standardFunctionsService: ApplianceService;
@@ -28,12 +22,12 @@ export class AcAccsessory implements AccessoryPlugin {
     private readonly informationService: Service;
 
     constructor(hap: HAP, log: Logging, api: BoschApi, name: string, serialNumber: string) {
-        this.log = log;
+        this.log = new CustomLogger(log, 'AcAccsessory');
         this.api = api;
         this.name = name;
         this.serialNumber = serialNumber;
         this.hap = hap;
-        this.standardFunctionsService = new ApplianceService(this.api, this.log);
+        this.standardFunctionsService = new ApplianceService(this.api, log);
 
         this.deviceService = new hap.Service.HeaterCooler(name);
         this.deviceService.getCharacteristic(hap.Characteristic.Active)
@@ -271,7 +265,7 @@ export class AcAccsessory implements AccessoryPlugin {
      * Typical this only ever happens at the pairing process.
      */
     identify(): void {
-        this.log("Identify!");
+        this.log.trace("Identify!");
     }
 
     /*

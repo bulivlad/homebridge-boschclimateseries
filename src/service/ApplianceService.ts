@@ -3,6 +3,7 @@ import {BoschApi} from "./BoschApi";
 import {Logger} from "homebridge";
 import {Constants} from "../util/Constants";
 import {DataManager} from "../util/DataManager";
+import {CustomLogger} from "../util/CustomLogger";
 
 export class ApplianceService {
     private standardFunctions: StandardFunctions | null = null
@@ -10,11 +11,11 @@ export class ApplianceService {
     private lastRefreshDate = new Date();
 
     private boschApi: BoschApi;
-    private log: Logger;
+    private log: CustomLogger;
 
     constructor(boschApi: BoschApi, log: Logger) {
         this.boschApi = boschApi;
-        this.log = log;
+        this.log = new CustomLogger(log, 'ApplianceService');
     }
 
     retrieveDeviceState(gatewayId: string) {

@@ -1,6 +1,7 @@
 export class DataManager {
     private static _refreshIntervalMillis: number = 60000;
     private static _boschApiBearerToken: string = '';
+    private static _loggingLevel: number = 3;
 
     static get refreshIntervalMillis(): number {
         return this._refreshIntervalMillis;
@@ -17,5 +18,13 @@ export class DataManager {
 
     static set boschApiBearerToken(value: string) {
         this._boschApiBearerToken = value;
+    }
+
+    static get loggingLevel(): number {
+        return this._loggingLevel;
+    }
+
+    static set loggingLevel(value: number) {
+        this._loggingLevel = value
     }
 }

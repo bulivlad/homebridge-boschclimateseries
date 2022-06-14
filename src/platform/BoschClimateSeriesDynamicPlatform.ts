@@ -1,18 +1,25 @@
-import http, {IncomingMessage, Server, ServerResponse} from "http";
 import {
     API,
     APIEvent,
-    CharacteristicEventTypes,
-    CharacteristicSetCallback,
-    CharacteristicValue,
     DynamicPlatformPlugin,
+    Formats,
     HAP,
     Logging,
     PlatformAccessory,
     PlatformAccessoryEvent,
     PlatformConfig,
+    Units,
 } from "homebridge";
 import {Constants} from "../util/Constants";
+import {BoschApi} from "../service/BoschApi";
+import {Token} from "../model/Token";
+import {DataManager} from "../util/DataManager";
+import {ActiveMapper} from "../mapper/ActiveMapper";
+import {TargetHeaterCoolerStateMapper} from "../mapper/TargetHeaterCoolerStateMapper";
+import {CurrentHeaterCoolerStateMapper} from "../mapper/CurrentHeaterCoolerStateMapper";
+import {FanRotationSpeedMapper} from "../mapper/FanRotationSpeedMapper";
+import {ApplianceService} from "../service/ApplianceService";
+import {CustomLogger, LoggingLevel} from "../util/CustomLogger";
 
 /*
  * IMPORTANT NOTICE
@@ -37,24 +44,38 @@ import {Constants} from "../util/Constants";
  * like this for example and used to access all exported variables and classes from HAP-NodeJS.
  */
 let hap: HAP;
-let Accessory: typeof PlatformAccessory;
 
 export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin {
 
-    private readonly log: Logging;
+    private readonly log: CustomLogger;
     private readonly api: API;
-
-    private requestServer?: Server;
+    private readonly boschApi: BoschApi;
+    private readonly jwtToken;
+    private readonly refreshToken;
+    private readonly deviceNameMapping: Map<string, string>;
+    private readonly standardFunctionsService: ApplianceService;
 
     private readonly accessories: PlatformAccessory[] = [];
 
     constructor(log: Logging, config: PlatformConfig, api: API) {
-        this.log = log;
+        this.setLoggingLevel(config.loggingLevel);
+        this.log = new CustomLogger(log, 'BoschClimateSeriesDynamicPlatform');
         this.api = api;
+        hap = api.hap;
+        this.jwtToken = config.jwtToken;
+        this.refreshToken = config.refreshToken;
+        const token = new Token(this.jwtToken, this.refreshToken);
+
+        this.boschApi = new BoschApi(token, log, api.user.persistPath());
+        this.standardFunctionsService = new ApplianceService(this.boschApi, log);
+
+        this.deviceNameMapping = new Map<string, string>(Object.entries(config.deviceNameMapping))
+        DataManager.refreshIntervalMillis = config.refreshInterval || DataManager.refreshIntervalMillis;
+        DataManager.boschApiBearerToken = config.basicAuthToken || DataManager.boschApiBearerToken;
 
         // probably parse config or something here
 
-        log.info("Example platform finished initializing!");
+        this.log.info("BoschClimateSeriesDynamic platform finished initializing!");
 
         /*
          * When this event is fired, homebridge restored all cached accessories from disk and did call their respective
@@ -63,11 +84,18 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
          * This event can also be used to start discovery of new accessories.
          */
         api.on(APIEvent.DID_FINISH_LAUNCHING, () => {
-            log.info("Example platform 'didFinishLaunching'");
+            this.log.info("Executed 'didFinishLaunching' callback");
 
-            // The idea of this plugin is that we open a http service which exposes api calls to add or remove accessories
-            this.createHttpService();
+            this.discoverDevices();
         });
+    }
+
+    private setLoggingLevel(value: string) {
+        if (value && LoggingLevel[value.toUpperCase()]) {
+            DataManager.loggingLevel = LoggingLevel[value.toUpperCase()] as number
+        } else {
+            DataManager.loggingLevel = LoggingLevel.INFO.valueOf()
+        }
     }
 
     /*
@@ -75,62 +103,280 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
      * It should be used to setup event handlers for characteristics and update respective values.
      */
     configureAccessory(accessory: PlatformAccessory): void {
-        this.log("Configuring accessory %s", accessory.displayName);
+        this.log.info("Configuring accessory %s", accessory.context.serialNumber);
 
         accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
-            this.log("%s identified!", accessory.displayName);
+            this.log.info("%s identified!", accessory.context.serialNumber);
         });
 
-        accessory.getService(hap.Service.Lightbulb)!.getCharacteristic(hap.Characteristic.On)
-            .on(CharacteristicEventTypes.SET, (value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-                this.log.info("%s Light was set to: " + value);
-                callback();
-            });
+        const deviceService = accessory.getService(hap.Service.HeaterCooler)!;
+        const informationService = accessory.getService(hap.Service.AccessoryInformation)!;
+
+        deviceService.getCharacteristic(hap.Characteristic.Active)
+            .onGet(async () => {
+                return this.standardFunctionsService.retrieveDeviceState(accessory.context.serialNumber)
+                    .then(value => {
+                        if (!value) {
+                            this.log.error("Null room temperature was found");
+                            return hap.Characteristic.Active.INACTIVE;
+                        }
+
+                        const currentState = value.value.valueOf()
+                        this.log.debug(`Current state of device ${accessory.context.serialNumber} is ${currentState}`);
+                        return ActiveMapper.mapToNumber(currentState);
+                    })
+                    .catch(value => {
+                        this.log.error(`Failed to get active characteristic with error ${value}`)
+                        return hap.Characteristic.Active.INACTIVE;
+                    })
+            })
+            .onSet(async (value) => {
+                //value is true/false if on/off
+                const desiredState = value as boolean ? 'on' : 'off'
+                this.standardFunctionsService.changeDeviceState(desiredState, accessory.context.serialNumber)
+                    .then(result => {
+                        if (result === desiredState) {
+                            this.log.debug(`Device ${accessory.context.serialNumber} state was changed to: ${desiredState}`);
+                        } else {
+                            this.log.debug(`Device ${accessory.context.serialNumber} state was NOT changed to: ${desiredState}`);
+                        }
+                    })
+                    .catch(error => {
+                        this.log.error(`Failed to change device ${accessory.context.serialNumber} state to ${desiredState} with error ${error}`)
+                    })
+            })
+        deviceService.getCharacteristic(hap.Characteristic.TargetHeaterCoolerState)
+            .onGet(async () => {
+                return this.standardFunctionsService.retrieveCurrentOperationMode(accessory.context.serialNumber)
+                    .then(value => {
+                        if (!value) {
+                            this.log.error("Null operation mode was found");
+                            return hap.Characteristic.TargetHeaterCoolerState.AUTO;
+                        }
+
+                        const currentOperationMode = value.value.valueOf()
+                        this.log.debug(`Current operation mode of device ${accessory.context.serialNumber} is ${currentOperationMode}`);
+                        return TargetHeaterCoolerStateMapper.mapToNumber(currentOperationMode);
+                    })
+                    .catch(error => {
+                        this.log.error(`Cannot set TargetHeatingCoolingState due to error ${JSON.stringify(error)}`);
+                        return hap.Characteristic.TargetHeaterCoolerState.AUTO;
+                    })
+            })
+            .onSet(async (value) => {
+                this.log.debug(`Changing TargetHeaterCoolerState it to raw ${value}`)
+                const desiredOperationModeString = TargetHeaterCoolerStateMapper.mapToString(value as number)
+                this.log.debug(`Changing TargetHeaterCoolerState it to ${desiredOperationModeString}`)
+
+                this.standardFunctionsService.changeOperationMode(desiredOperationModeString, accessory.context.serialNumber)
+                    .then(result => {
+                        if (result && result === desiredOperationModeString) {
+                            this.log.info(`Device operation mode was changed to ${result}`)
+                        } else {
+                            this.log.info(`Device operation mode was not changed to ${desiredOperationModeString}`)
+                        }
+                    })
+                    .catch(error => {
+                        this.log.error(error)
+                    })
+            })
+
+        deviceService.getCharacteristic(hap.Characteristic.CurrentHeaterCoolerState)
+            .onGet(async () => {
+                const temperatureSetPointPromise = this.standardFunctionsService.retrieveTemperatureSetPoint(accessory.context.serialNumber);
+                const roomTemperaturePromise = this.standardFunctionsService.retrieveCurrentRoomTemperature(accessory.context.serialNumber);
+                const operationModePromise = this.standardFunctionsService.retrieveCurrentOperationMode(accessory.context.serialNumber);
+
+                return Promise.all([temperatureSetPointPromise, roomTemperaturePromise, operationModePromise])
+                    .then(results => {
+                        const temperatureSetPoint = results[0];
+                        const roomTemperature = results[1];
+                        const operationMode = results[2];
+
+                        if (temperatureSetPoint && temperatureSetPoint.value && roomTemperature && roomTemperature.value && operationMode && operationMode.value) {
+                            const temperatureSetPointValue = parseFloat(temperatureSetPoint.value.valueOf())
+                            const roomTemperatureValue = parseFloat(roomTemperature.value.valueOf())
+                            return CurrentHeaterCoolerStateMapper.mapToNumber(roomTemperatureValue, temperatureSetPointValue, operationMode.value.valueOf())
+                        } else {
+                            throw results
+                        }
+                    })
+                    .catch(error => {
+                        this.log.error(`Encountered error with body ${JSON.stringify(error)} when reading CurrentHeaterCoolerState. Returning INACTIVE state`)
+                        return hap.Characteristic.CurrentHeaterCoolerState.INACTIVE;
+                    })
+            })
+
+        deviceService.getCharacteristic(hap.Characteristic.CurrentTemperature)
+            .onGet(async () => {
+                return this.standardFunctionsService.retrieveCurrentRoomTemperature(accessory.context.serialNumber)
+                    .then(value => {
+                        if (!value) {
+                            this.log.error("Null room temperature was found");
+                            return 0.0
+                        }
+
+                        const currentTemperature = value.value.valueOf()
+                        this.log.info("Current room temperature for sensor has returned: " + currentTemperature);
+                        return parseFloat(currentTemperature)
+                    })
+                    .catch(value => {
+                        this.log.error(value);
+                        return 0.0
+                    })
+            })
+
+        deviceService.getCharacteristic(hap.Characteristic.Name)
+            .onGet(async () => {
+                return accessory.displayName;
+            })
+
+        deviceService.getCharacteristic(hap.Characteristic.CoolingThresholdTemperature)
+            .setProps({
+                format: Formats.FLOAT,
+                unit: Units.CELSIUS,
+                minValue: 17.0,
+                maxValue: 30.0,
+                minStep: 1
+            })
+            .onGet(async () => {
+                return this.standardFunctionsService.retrieveTemperatureSetPoint(accessory.context.serialNumber)
+                    .then(result => {
+                        if (result && result.value) {
+                            return parseFloat(result.value.valueOf());
+                        } else {
+                            return null;
+                        }
+                    })
+            })
+            .onSet(async (value) => {
+                return this.standardFunctionsService.setTemperatureSetPoint(value as number, accessory.context.serialNumber)
+                    .then(result => {
+                        if (result && result === value) {
+                            this.log.debug(`Changed temperature set point to ${result} for device ${accessory.context.serialNumber}`);
+                        } else {
+                            this.log.info(`Device temperature set point was not changed to ${value}`)
+                        }
+                    })
+                    .catch(error => {
+                        this.log.error(error)
+                    })
+            })
+
+        deviceService.getCharacteristic(hap.Characteristic.HeatingThresholdTemperature)
+            .setProps({
+                format: Formats.FLOAT,
+                unit: Units.CELSIUS,
+                minValue: 17.0,
+                maxValue: 30.0,
+                minStep: 1
+            })
+            .onGet(async () => {
+                return this.standardFunctionsService.retrieveTemperatureSetPoint(accessory.context.serialNumber)
+                    .then(result => {
+                        if (result && result.value) {
+                            return parseFloat(result.value.valueOf());
+                        } else {
+                            return null;
+                        }
+                    })
+            })
+            .onSet(async (value) => {
+                return this.standardFunctionsService.setTemperatureSetPoint(value as number, accessory.context.serialNumber)
+                    .then(result => {
+                        if (result && result === value) {
+                            this.log.debug(`Changed temperature set point to ${result} for device ${accessory.context.serialNumber}`);
+                        } else {
+                            this.log.info(`Device temperature set point was not changed to ${value}`)
+                        }
+                    })
+                    .catch(error => {
+                        this.log.error(error)
+                    })
+            })
+
+        deviceService.getCharacteristic(hap.Characteristic.RotationSpeed)
+            .setProps({
+                format: Formats.FLOAT,
+                unit: Units.PERCENTAGE,
+                minValue: 0.0,
+                maxValue: 100.0,
+                minStep: 25,
+                validValues: [0.0, 25.0, 50.0, 75.0, 100.0]
+            })
+            .onGet(async () => {
+                return this.standardFunctionsService.retrieveFanSpeed(accessory.context.serialNumber)
+                    .then(result => {
+                        if (result && result.value) {
+                            return FanRotationSpeedMapper.mapToNumber(result.value.valueOf());
+                        } else {
+                            return 100.0;
+                        }
+                    })
+                    .catch(error => {
+                        this.log.error(error)
+                        return 100.0;
+                    })
+            })
+            .onSet(async (value) => {
+                const valueString = FanRotationSpeedMapper.mapToString(value as number)
+                return this.standardFunctionsService.setFanSpeed(valueString as string, accessory.context.serialNumber)
+                    .then(result => {
+                        if (result && result === valueString) {
+                            this.log.debug(`Changed fan speed to ${result} for device ${accessory.context.serialNumber}`);
+                        } else {
+                            this.log.info(`Device fan speed was not changed to ${value}`)
+                        }
+                    })
+                    .catch(error => {
+                        this.log.error(error)
+                    })
+            })
+
+        informationService
+            .setCharacteristic(hap.Characteristic.Manufacturer, "DotInc")
+            .setCharacteristic(hap.Characteristic.Model, "BoschClimateSeries")
+            .setCharacteristic(hap.Characteristic.SerialNumber, accessory.context.serialNumber)
+            .setCharacteristic(hap.Characteristic.Name, accessory.displayName);
 
         this.accessories.push(accessory);
     }
 
-    // --------------------------- CUSTOM METHODS ---------------------------
+    private async discoverDevices(): Promise<boolean> {
+        return this.boschApi.retrieveAllGateways()
+            .then(gateways => {
+                this.log.info(`Discovered ${gateways.length || 0} devices. Will filter them to exclude invalid and existing ones!`)
+                if (gateways) {
+                    const gatewaysId = gateways.map(e => e.deviceId.valueOf());
+                    const accessoriesNoLongerExistent = this.accessories.filter(e => !gatewaysId.includes(e.context.serialNumber));
+                    this.api.unregisterPlatformAccessories(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, accessoriesNoLongerExistent)
+                    this.log.info(`Removed ${accessoriesNoLongerExistent.length} devices as they were not longer registered with the server!`)
+                    this.log.debug(`Removed ${accessoriesNoLongerExistent} devices as they were not longer registered with the server!`)
 
-    addAccessory(name: string) {
-        this.log.info("Adding new accessory with name %s", name);
+                    gateways.forEach(gateway => {
+                        const generatedUUID = hap.uuid.generate(gateway.deviceId.valueOf());
+                        const existingAccessory = this.accessories.find(accessory => accessory.UUID === generatedUUID);
 
-        // uuid must be generated from a unique but not changing data source, name should not be used in the most cases. But works in this specific example.
-        const uuid = hap.uuid.generate(name);
-        const accessory = new Accessory(name, uuid);
-
-        accessory.addService(hap.Service.Lightbulb, "Test Light");
-
-        this.configureAccessory(accessory); // abusing the configureAccessory here
-
-        this.api.registerPlatformAccessories(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, [accessory]);
+                        if (!existingAccessory) {
+                            const  deviceName = this.deviceNameMapping?.get(gateway.deviceId.valueOf()) || gateway.deviceId.valueOf();
+                            const accessory = new this.api.platformAccessory(deviceName, generatedUUID);
+                            accessory.context.serialNumber = gateway.deviceId.valueOf();
+                            accessory.addService(hap.Service.HeaterCooler, deviceName);
+                            this.configureAccessory(accessory);
+                            this.log.info(`Registering new accessory ${gateway.deviceId.valueOf()} in platform`)
+                            this.api.registerPlatformAccessories(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, [accessory]);
+                        } else {
+                            this.log.info(`Updating old accessory ${existingAccessory.context.serialNumber} in platform`)
+                            this.api.updatePlatformAccessories([existingAccessory])
+                        }
+                    });
+                    return true;
+                }
+                return false;
+            })
+            .catch(error => {
+                this.log.error(`Error received when discovering devices ${JSON.stringify(error)}`);
+                return false;
+            });
     }
-
-    removeAccessories() {
-        // we don't have any special identifiers, we just remove all our accessories
-
-        this.log.info("Removing all accessories");
-
-        this.api.unregisterPlatformAccessories(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, this.accessories);
-        this.accessories.splice(0, this.accessories.length); // clear out the array
-    }
-
-    createHttpService() {
-        this.requestServer = http.createServer(this.handleRequest.bind(this));
-        this.requestServer.listen(18081, () => this.log.info("Http server listening on 18081..."));
-    }
-
-    private handleRequest(request: IncomingMessage, response: ServerResponse) {
-        if (request.url === "/add") {
-            this.addAccessory(new Date().toISOString());
-        } else if (request.url === "/remove") {
-            this.removeAccessories();
-        }
-
-        response.writeHead(204); // 204 No content
-        response.end();
-    }
-
-    // ----------------------------------------------------------------------
-
 }

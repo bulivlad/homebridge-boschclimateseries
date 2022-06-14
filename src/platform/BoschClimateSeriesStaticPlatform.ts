@@ -3,18 +3,22 @@ import {BoschApi} from "../service/BoschApi";
 import {DataManager} from "../util/DataManager";
 import {AcAccsessory} from "../accessory/AcAccsessory";
 import {Token} from "../model/Token";
+import {CustomLogger, LoggingLevel} from "../util/CustomLogger";
 
 export class BoschClimateSeriesStaticPlatform implements StaticPlatformPlugin {
-    private readonly log: Logging;
+    private readonly log: CustomLogger;
     private readonly jwtToken;
     private readonly refreshToken;
     private readonly boschApi: BoschApi;
     private readonly api: API;
+    private readonly defaultLogger: Logging;
 
     private readonly deviceNameMapping: Map<string, string>;
 
     constructor(log: Logging, config: PlatformConfig, api: API) {
-        this.log = log;
+        this.setLoggingLevel(config.loggingLevel);
+        this.defaultLogger = log;
+        this.log = new CustomLogger(log, 'BoschClimateSeriesStaticPlatform');
         this.api = api;
         this.jwtToken = config.jwtToken;
         this.refreshToken = config.refreshToken;
@@ -24,9 +28,17 @@ export class BoschClimateSeriesStaticPlatform implements StaticPlatformPlugin {
 
         this.deviceNameMapping = new Map<string, string>(Object.entries(config.deviceNameMapping))
         DataManager.refreshIntervalMillis = config.refreshInterval || DataManager.refreshIntervalMillis;
-        DataManager.boschApiBearerToken = config.basicAuthToken || DataManager.boschApiBearerToken
+        DataManager.boschApiBearerToken = config.basicAuthToken || DataManager.boschApiBearerToken;
 
-        log.info("BoschClimateSeriesStaticPlatform platform finished initializing!");
+        this.log.info("BoschClimateSeriesStaticPlatform platform finished initializing!");
+    }
+
+    private setLoggingLevel(value: string) {
+        if (value && LoggingLevel[value.toUpperCase()]) {
+            DataManager.loggingLevel = LoggingLevel[value.toUpperCase()] as number
+        } else {
+            DataManager.loggingLevel = LoggingLevel.INFO.valueOf()
+        }
     }
 
     /*
@@ -38,7 +50,7 @@ export class BoschClimateSeriesStaticPlatform implements StaticPlatformPlugin {
     accessories(callback: (foundAccessories: AccessoryPlugin[]) => void): void {
         this.boschApi.retrieveAllGateways().then(value => {
             if (value) {
-                const result = value.map(e => new AcAccsessory(this.api.hap, this.log, this.boschApi, this.deviceNameMapping?.get(e.deviceId.valueOf()) || e.deviceId.valueOf(), e.deviceId.valueOf()))
+                const result = value.map(e => new AcAccsessory(this.api.hap, this.defaultLogger, this.boschApi, this.deviceNameMapping?.get(e.deviceId.valueOf()) || e.deviceId.valueOf(), e.deviceId.valueOf()))
                 callback(result)
                 return
             }
