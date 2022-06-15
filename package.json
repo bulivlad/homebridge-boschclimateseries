@@ -1,6 +1,6 @@
 {
   "name": "homebridge-boschclimateseries",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A static platform plugin for homebridge bosch climate series  written in Typescript",
   "main": "dist/index",
   "typings": "dist/index",
