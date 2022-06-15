@@ -31,5 +31,5 @@ let hap: HAP;
 
 export = (api: API) => {
     hap = api.hap;
-    api.registerPlatform(Constants.PLATFORM_NAME, BoschClimateSeriesDynamicPlatform)
+    api.registerPlatform(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, BoschClimateSeriesDynamicPlatform)
 };

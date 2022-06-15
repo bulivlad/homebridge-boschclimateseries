@@ -1,0 +1,66 @@
+{
+  "pluginAlias": "BoschClimateSeries",
+  "pluginType": "platform",
+  "singular": true,
+
+  "schema": {
+    "type": "object",
+    "properties": {
+      "jwtToken": { "type": "string" },
+      "refreshToken": { "type": "string" },
+      "basicAuthToken": { "type": "string" },
+      "loggingLevel": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "required": true,
+            "enum": [ "ERROR", "WARN", "INFO", "DEBUG", "TRACE" ]
+          }
+        }
+      },
+      "refreshInterval": { "type": "number" },
+      "deviceNameMapping": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "gatewayId": {"type": "string"},
+            "name": {"type": "string"}
+          }
+        }
+      }
+    },
+    "required": [ "jwtToken", "refreshToken", "basicAuthToken" ]
+  },
+  "layout": [
+    { "key": "jwtToken", "type": "string", "description": "Bosch OAtuh jwt token" },
+    { "key": "refreshToken", "type": "string", "description": "Bosch OAtuh refresh token" },
+    { "key": "basicAuthToken", "type": "string", "description": "Bosch basic authentication token" },
+    { "key": "loggingLevel.level", "title": "Logging level" },
+    { "key": "refreshInterval", "type": "number", "description": "The interval between devices status refreshes" },
+    { "key": "deviceNameMapping",
+      "type": "object",
+      "listItems": 1,
+      "items": [ {
+        "type": "div",
+        "displayFlex": true,
+        "flex-direction": "row",
+        "items": [
+          { "key": "deviceNameMapping[].gatewayId", "flex": "1 1 100px",
+            "notitle": true, "placeholder": "Gateway ID"
+          },
+          { "key": "deviceNameMapping[].name", "flex": "3 3 200px",
+            "notitle": true, "placeholder": "Device diplay name"
+          }
+        ]
+      } ]
+    }
+  ],
+  "data": {
+    "refreshInterval": 60000,
+    "loggingLevel": {
+      "level": "INFO"
+    }
+  }
+}

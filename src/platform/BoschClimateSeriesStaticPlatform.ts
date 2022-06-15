@@ -5,6 +5,9 @@ import {AcAccsessory} from "../accessory/AcAccsessory";
 import {Token} from "../model/Token";
 import {CustomLogger, LoggingLevel} from "../util/CustomLogger";
 
+/**
+ * @Deprecated Use {@link BoschClimateSeriesDynamicPlatform} instead
+ */
 export class BoschClimateSeriesStaticPlatform implements StaticPlatformPlugin {
     private readonly log: CustomLogger;
     private readonly jwtToken;
@@ -16,7 +19,7 @@ export class BoschClimateSeriesStaticPlatform implements StaticPlatformPlugin {
     private readonly deviceNameMapping: Map<string, string>;
 
     constructor(log: Logging, config: PlatformConfig, api: API) {
-        this.setLoggingLevel(config.loggingLevel);
+        this.setLoggingLevel(config.loggingLevel.level);
         this.defaultLogger = log;
         this.log = new CustomLogger(log, 'BoschClimateSeriesStaticPlatform');
         this.api = api;
@@ -26,11 +29,15 @@ export class BoschClimateSeriesStaticPlatform implements StaticPlatformPlugin {
 
         this.boschApi = new BoschApi(token, log, api.user.persistPath());
 
-        this.deviceNameMapping = new Map<string, string>(Object.entries(config.deviceNameMapping))
+        this.deviceNameMapping = this.buildDeviceNameMapping(config.deviceNameMapping);
         DataManager.refreshIntervalMillis = config.refreshInterval || DataManager.refreshIntervalMillis;
         DataManager.boschApiBearerToken = config.basicAuthToken || DataManager.boschApiBearerToken;
 
         this.log.info("BoschClimateSeriesStaticPlatform platform finished initializing!");
+    }
+
+    private buildDeviceNameMapping(deviceNameMapping: Array<any>): Map<string, string> {
+        return new Map(deviceNameMapping.map(e => [e.gatewayId, e.name]))
     }
 
     private setLoggingLevel(value: string) {

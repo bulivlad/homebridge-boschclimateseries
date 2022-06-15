@@ -58,7 +58,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
     private readonly accessories: PlatformAccessory[] = [];
 
     constructor(log: Logging, config: PlatformConfig, api: API) {
-        this.setLoggingLevel(config.loggingLevel);
+        this.setLoggingLevel(config.loggingLevel.level);
         this.log = new CustomLogger(log, 'BoschClimateSeriesDynamicPlatform');
         this.api = api;
         hap = api.hap;
@@ -69,7 +69,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
         this.boschApi = new BoschApi(token, log, api.user.persistPath());
         this.standardFunctionsService = new ApplianceService(this.boschApi, log);
 
-        this.deviceNameMapping = new Map<string, string>(Object.entries(config.deviceNameMapping))
+        this.deviceNameMapping = this.buildDeviceNameMapping(config.deviceNameMapping);
         DataManager.refreshIntervalMillis = config.refreshInterval || DataManager.refreshIntervalMillis;
         DataManager.boschApiBearerToken = config.basicAuthToken || DataManager.boschApiBearerToken;
 
@@ -88,6 +88,10 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
 
             this.discoverDevices();
         });
+    }
+
+    private buildDeviceNameMapping(deviceNameMapping: Array<any>): Map<string, string> {
+        return new Map(deviceNameMapping.map(e => [e.gatewayId, e.name]))
     }
 
     private setLoggingLevel(value: string) {
