@@ -31,6 +31,7 @@ export class PlatformService {
         accessory.context.extraTemperatureSensor = device?.exposeTemperatureSensor || false;
         accessory.addService(this.hap.Service.HeaterCooler, deviceName);
         if (accessory.context.extraTemperatureSensor) {
+            this.log.trace("Adding temperature sensor service for device %s - %s", gateway.deviceId.valueOf(), deviceName);
             accessory.addService(this.hap.Service.TemperatureSensor, deviceName);
         }
 

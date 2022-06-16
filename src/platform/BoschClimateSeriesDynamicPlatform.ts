@@ -168,6 +168,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
             .onSet(this.swingModeHandler.onSetHandler(accessory));
 
         if (accessory.context.extraTemperatureSensor) {
+            this.log.trace("Adding temperature sensor characteristic handlers for device %s - %s", accessory.context.serialNumber, accessory.displayName);
             const temperatureService = accessory.getService(hap.Service.TemperatureSensor)!;
             temperatureService.getCharacteristic(hap.Characteristic.CurrentTemperature)
                 .onGet(this.currentTemperatureHandler.onGetHandler(accessory))
