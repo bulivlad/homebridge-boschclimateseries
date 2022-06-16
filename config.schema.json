@@ -26,7 +26,8 @@
           "type": "object",
           "properties": {
             "gatewayId": {"type": "string"},
-            "name": {"type": "string"}
+            "name": {"type": "string"},
+            "exposeTemperatureSensor": {"type": "boolean"}
           }
         }
       }
@@ -46,12 +47,16 @@
         "type": "div",
         "displayFlex": true,
         "flex-direction": "row",
+        "justify-content": "space-evenly",
         "items": [
           { "key": "deviceNameMapping[].gatewayId", "flex": "1 1 100px",
             "notitle": true, "placeholder": "Gateway ID"
           },
           { "key": "deviceNameMapping[].name", "flex": "3 3 200px",
             "notitle": true, "placeholder": "Device diplay name"
+          },
+          { "key": "deviceNameMapping[].exposeTemperatureSensor", "flex": "1 2 50px",
+            "notitle": false, "title": "Temperature sensor"
           }
         ]
       } ]

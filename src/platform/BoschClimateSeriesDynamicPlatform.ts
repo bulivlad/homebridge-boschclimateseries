@@ -20,6 +20,7 @@ import {CurrentHeaterCoolerStateMapper} from "../mapper/CurrentHeaterCoolerState
 import {FanRotationSpeedMapper} from "../mapper/FanRotationSpeedMapper";
 import {ApplianceService} from "../service/ApplianceService";
 import {CustomLogger, LoggingLevel} from "../util/CustomLogger";
+import {DeviceMapping} from "../model/DeviceMapping";
 
 /*
  * IMPORTANT NOTICE
@@ -52,7 +53,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
     private readonly boschApi: BoschApi;
     private readonly jwtToken;
     private readonly refreshToken;
-    private readonly deviceNameMapping: Map<string, string>;
+    private readonly deviceNameMapping: Map<string, DeviceMapping>;
     private readonly standardFunctionsService: ApplianceService;
 
     private readonly accessories: PlatformAccessory[] = [];
@@ -90,8 +91,8 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
         });
     }
 
-    private buildDeviceNameMapping(deviceNameMapping: Array<any>): Map<string, string> {
-        return new Map(deviceNameMapping.map(e => [e.gatewayId, e.name]))
+    private buildDeviceNameMapping(deviceNameMapping: Array<any>): Map<string, DeviceMapping> {
+        return new Map(deviceNameMapping.map(e => [e.gatewayId, e as DeviceMapping]))
     }
 
     private setLoggingLevel(value: string) {
@@ -121,16 +122,16 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                 return this.standardFunctionsService.retrieveDeviceState(accessory.context.serialNumber)
                     .then(value => {
                         if (!value) {
-                            this.log.error("Null room temperature was found");
+                            this.log.error("Null room temperature was found for device %s", accessory.context.serialNumber);
                             return hap.Characteristic.Active.INACTIVE;
                         }
 
                         const currentState = value.value.valueOf()
-                        this.log.debug(`Current state of device ${accessory.context.serialNumber} is ${currentState}`);
+                        this.log.debug("Current state of device %s is %s", accessory.context.serialNumber, currentState);
                         return ActiveMapper.mapToNumber(currentState);
                     })
-                    .catch(value => {
-                        this.log.error(`Failed to get active characteristic with error ${value}`)
+                    .catch(error => {
+                        this.log.error("Failed to get active characteristic for device %s with error %s", accessory.context.serialNumber, JSON.stringify(error));
                         return hap.Characteristic.Active.INACTIVE;
                     })
             })
@@ -140,13 +141,13 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                 this.standardFunctionsService.changeDeviceState(desiredState, accessory.context.serialNumber)
                     .then(result => {
                         if (result === desiredState) {
-                            this.log.debug(`Device ${accessory.context.serialNumber} state was changed to: ${desiredState}`);
+                            this.log.debug("Device %s state was changed to: %s", accessory.context.serialNumber, desiredState);
                         } else {
-                            this.log.debug(`Device ${accessory.context.serialNumber} state was NOT changed to: ${desiredState}`);
+                            this.log.debug("Device %s state was NOT changed to: %s", accessory.context.serialNumber, desiredState);
                         }
                     })
                     .catch(error => {
-                        this.log.error(`Failed to change device ${accessory.context.serialNumber} state to ${desiredState} with error ${error}`)
+                        this.log.error("Failed to change device %s state to %s with error %s", accessory.context.serialNumber, desiredState, JSON.stringify(error))
                     })
             })
         deviceService.getCharacteristic(hap.Characteristic.TargetHeaterCoolerState)
@@ -154,34 +155,33 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                 return this.standardFunctionsService.retrieveCurrentOperationMode(accessory.context.serialNumber)
                     .then(value => {
                         if (!value) {
-                            this.log.error("Null operation mode was found");
+                            this.log.error("Null room temperature was found for device %s", accessory.context.serialNumber);
                             return hap.Characteristic.TargetHeaterCoolerState.AUTO;
                         }
 
                         const currentOperationMode = value.value.valueOf()
-                        this.log.debug(`Current operation mode of device ${accessory.context.serialNumber} is ${currentOperationMode}`);
+                        this.log.debug("Current operation mode of device %s is %s", accessory.context.serialNumber, currentOperationMode);
                         return TargetHeaterCoolerStateMapper.mapToNumber(currentOperationMode);
                     })
                     .catch(error => {
-                        this.log.error(`Cannot set TargetHeatingCoolingState due to error ${JSON.stringify(error)}`);
+                        this.log.error("Cannot set TargetHeatingCoolingState for device %s due to error %s", accessory.context.serialNumber, JSON.stringify(error));
                         return hap.Characteristic.TargetHeaterCoolerState.AUTO;
                     })
             })
             .onSet(async (value) => {
-                this.log.debug(`Changing TargetHeaterCoolerState it to raw ${value}`)
                 const desiredOperationModeString = TargetHeaterCoolerStateMapper.mapToString(value as number)
-                this.log.debug(`Changing TargetHeaterCoolerState it to ${desiredOperationModeString}`)
+                this.log.debug("Changing TargetHeaterCoolerState for device %s it to %s", accessory.context.serialNumber, desiredOperationModeString)
 
                 this.standardFunctionsService.changeOperationMode(desiredOperationModeString, accessory.context.serialNumber)
                     .then(result => {
                         if (result && result === desiredOperationModeString) {
-                            this.log.info(`Device operation mode was changed to ${result}`)
+                            this.log.info("Device %s operation mode was changed to %s", accessory.context.serialNumber, result)
                         } else {
-                            this.log.info(`Device operation mode was not changed to ${desiredOperationModeString}`)
+                            this.log.info("Device %s operation mode was not changed to %s", accessory.context.serialNumber, desiredOperationModeString)
                         }
                     })
                     .catch(error => {
-                        this.log.error(error)
+                        this.log.error("Error %s found when setting TargetHeaterCoolerState for device %s", JSON.stringify(error), accessory.context.serialNumber);
                     })
             })
 
@@ -206,7 +206,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                         }
                     })
                     .catch(error => {
-                        this.log.error(`Encountered error with body ${JSON.stringify(error)} when reading CurrentHeaterCoolerState. Returning INACTIVE state`)
+                        this.log.error("Encountered error %s when reading CurrentHeaterCoolerState for device %s. Returning INACTIVE state", JSON.stringify(error), accessory.context.serialNumber)
                         return hap.Characteristic.CurrentHeaterCoolerState.INACTIVE;
                     })
             })
@@ -216,16 +216,16 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                 return this.standardFunctionsService.retrieveCurrentRoomTemperature(accessory.context.serialNumber)
                     .then(value => {
                         if (!value) {
-                            this.log.error("Null room temperature was found");
+                            this.log.error("Null room temperature was found for device %s", accessory.context.serialNumber);
                             return 0.0
                         }
 
                         const currentTemperature = value.value.valueOf()
-                        this.log.info("Current room temperature for sensor has returned: " + currentTemperature);
+                        this.log.info("Current room temperature for device %s has returned: %s", accessory.context.serialNumber, currentTemperature);
                         return parseFloat(currentTemperature)
                     })
-                    .catch(value => {
-                        this.log.error(value);
+                    .catch(error => {
+                        this.log.error("Error %s found when reading current temperate for device %s", JSON.stringify(error), accessory.context.serialNumber);
                         return 0.0
                     })
             })
@@ -252,6 +252,10 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                             return null;
                         }
                     })
+                    .catch(error => {
+                        this.log.error("Error %s found when reading CoolingThresholdTemperature for device %s", JSON.stringify(error), accessory.context.serialNumber);
+                        return 0.0
+                    })
             })
             .onSet(async (value) => {
                 return this.standardFunctionsService.setTemperatureSetPoint(value as number, accessory.context.serialNumber)
@@ -259,11 +263,11 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                         if (result && result === value) {
                             this.log.debug(`Changed temperature set point to ${result} for device ${accessory.context.serialNumber}`);
                         } else {
-                            this.log.info(`Device temperature set point was not changed to ${value}`)
+                            this.log.info("Device %s temperature set point was not changed to %s", accessory.context.serialNumber, value)
                         }
                     })
                     .catch(error => {
-                        this.log.error(error)
+                        this.log.error("Error %s found when setting CoolingThresholdTemperature for device %s", JSON.stringify(error), accessory.context.serialNumber);
                     })
             })
 
@@ -284,18 +288,22 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                             return null;
                         }
                     })
+                    .catch(error => {
+                        this.log.error("Error %s found when reading HeatingThresholdTemperature for device %s", JSON.stringify(error), accessory.context.serialNumber);
+                        return null;
+                    })
             })
             .onSet(async (value) => {
                 return this.standardFunctionsService.setTemperatureSetPoint(value as number, accessory.context.serialNumber)
                     .then(result => {
                         if (result && result === value) {
-                            this.log.debug(`Changed temperature set point to ${result} for device ${accessory.context.serialNumber}`);
+                            this.log.debug("Changed temperature set point to %s for device %s", result, accessory.context.serialNumber);
                         } else {
-                            this.log.info(`Device temperature set point was not changed to ${value}`)
+                            this.log.info("Device %s temperature set point was not changed to %s", accessory.context.serialNumber, value)
                         }
                     })
                     .catch(error => {
-                        this.log.error(error)
+                        this.log.error("Error %s found when setting HeatingThresholdTemperature for device %s", JSON.stringify(error), accessory.context.serialNumber);
                     })
             })
 
@@ -318,7 +326,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                         }
                     })
                     .catch(error => {
-                        this.log.error(error)
+                        this.log.error("Error %s found when reading RotationSpeed for device %s", JSON.stringify(error), accessory.context.serialNumber);
                         return 100.0;
                     })
             })
@@ -327,15 +335,41 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                 return this.standardFunctionsService.setFanSpeed(valueString as string, accessory.context.serialNumber)
                     .then(result => {
                         if (result && result === valueString) {
-                            this.log.debug(`Changed fan speed to ${result} for device ${accessory.context.serialNumber}`);
+                            this.log.debug("Changed fan speed to %s for device %s", result, accessory.context.serialNumber);
                         } else {
-                            this.log.info(`Device fan speed was not changed to ${value}`)
+                            this.log.info("Device %s fan speed was not changed to %s", accessory.context.serialNumber, value);
                         }
                     })
                     .catch(error => {
-                        this.log.error(error)
+                        this.log.error("Error %s found when setting RotationSpeed for device %s", JSON.stringify(error), accessory.context.serialNumber);
                     })
             })
+
+        if (accessory.context.extraTemperatureSensor) {
+            const temperatureService = accessory.getService(hap.Service.TemperatureSensor)!;
+            temperatureService.getCharacteristic(hap.Characteristic.CurrentTemperature)
+                .onGet(async () => {
+                    return this.standardFunctionsService.retrieveCurrentRoomTemperature(accessory.context.serialNumber)
+                        .then(value => {
+                            if (!value) {
+                                this.log.error("Null room temperature was found for device %s", accessory.context.serialNumber);
+                                return 0.0
+                            }
+
+                            const currentTemperature = value.value.valueOf()
+                            this.log.info("Current room temperature for device %s has returned: %s", accessory.context.serialNumber, currentTemperature);
+                            return parseFloat(currentTemperature)
+                        })
+                        .catch(error => {
+                            this.log.error("Error %s found when reading current temperate for device %s", JSON.stringify(error), accessory.context.serialNumber);
+                            return 0.0
+                        })
+                })
+            temperatureService.getCharacteristic(hap.Characteristic.Name)
+                .onGet(async () => {
+                    return "Temperature sensor";
+                })
+        }
 
         informationService
             .setCharacteristic(hap.Characteristic.Manufacturer, "DotInc")
@@ -362,10 +396,15 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
                         const existingAccessory = this.accessories.find(accessory => accessory.UUID === generatedUUID);
 
                         if (!existingAccessory) {
-                            const  deviceName = this.deviceNameMapping?.get(gateway.deviceId.valueOf()) || gateway.deviceId.valueOf();
+                            const device = this.deviceNameMapping?.get(gateway.deviceId.valueOf()) || null;
+                            const deviceName = device?.name || gateway.deviceId.valueOf();
                             const accessory = new this.api.platformAccessory(deviceName, generatedUUID);
                             accessory.context.serialNumber = gateway.deviceId.valueOf();
+                            accessory.context.extraTemperatureSensor = device?.exposeTemperatureSensor || false;
                             accessory.addService(hap.Service.HeaterCooler, deviceName);
+                            if (accessory.context.extraTemperatureSensor) {
+                                accessory.addService(hap.Service.TemperatureSensor, deviceName);
+                            }
                             this.configureAccessory(accessory);
                             this.log.info(`Registering new accessory ${gateway.deviceId.valueOf()} in platform`)
                             this.api.registerPlatformAccessories(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, [accessory]);
