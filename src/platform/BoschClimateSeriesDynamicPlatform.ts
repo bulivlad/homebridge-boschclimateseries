@@ -21,6 +21,7 @@ import {FanRotationSpeedMapper} from "../mapper/FanRotationSpeedMapper";
 import {ApplianceService} from "../service/ApplianceService";
 import {CustomLogger, LoggingLevel} from "../util/CustomLogger";
 import {DeviceMapping} from "../model/DeviceMapping";
+import {PlatformService} from "../service/PlatformService";
 
 /*
  * IMPORTANT NOTICE
@@ -54,7 +55,9 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
     private readonly jwtToken;
     private readonly refreshToken;
     private readonly deviceNameMapping: Map<string, DeviceMapping>;
+
     private readonly standardFunctionsService: ApplianceService;
+    private readonly platformService : PlatformService;
 
     private readonly accessories: PlatformAccessory[] = [];
 
@@ -74,7 +77,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
         DataManager.refreshIntervalMillis = config.refreshInterval || DataManager.refreshIntervalMillis;
         DataManager.boschApiBearerToken = config.basicAuthToken || DataManager.boschApiBearerToken;
 
-        // probably parse config or something here
+        this.platformService = new PlatformService(api, log);
 
         this.log.info("BoschClimateSeriesDynamic platform finished initializing!");
 
@@ -385,11 +388,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
             .then(gateways => {
                 this.log.info(`Discovered ${gateways.length || 0} devices. Will filter them to exclude invalid and existing ones!`)
                 if (gateways) {
-                    const gatewaysId = gateways.map(e => e.deviceId.valueOf());
-                    const accessoriesNoLongerExistent = this.accessories.filter(e => !gatewaysId.includes(e.context.serialNumber));
-                    this.api.unregisterPlatformAccessories(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, accessoriesNoLongerExistent)
-                    this.log.info(`Removed ${accessoriesNoLongerExistent.length} devices as they were not longer registered with the server!`)
-                    this.log.debug(`Removed ${accessoriesNoLongerExistent} devices as they were not longer registered with the server!`)
+                    this.platformService.unregisterUnavailableAccessories(gateways, this.accessories);
 
                     gateways.forEach(gateway => {
                         const generatedUUID = hap.uuid.generate(gateway.deviceId.valueOf());
@@ -397,14 +396,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
 
                         if (!existingAccessory) {
                             const device = this.deviceNameMapping?.get(gateway.deviceId.valueOf()) || null;
-                            const deviceName = device?.name || gateway.deviceId.valueOf();
-                            const accessory = new this.api.platformAccessory(deviceName, generatedUUID);
-                            accessory.context.serialNumber = gateway.deviceId.valueOf();
-                            accessory.context.extraTemperatureSensor = device?.exposeTemperatureSensor || false;
-                            accessory.addService(hap.Service.HeaterCooler, deviceName);
-                            if (accessory.context.extraTemperatureSensor) {
-                                accessory.addService(hap.Service.TemperatureSensor, deviceName);
-                            }
+                            const accessory = this.platformService.createNewAccessory(device, gateway, generatedUUID);
                             this.configureAccessory(accessory);
                             this.log.info(`Registering new accessory ${gateway.deviceId.valueOf()} in platform`)
                             this.api.registerPlatformAccessories(Constants.PLUGIN_NAME, Constants.PLATFORM_NAME, [accessory]);
