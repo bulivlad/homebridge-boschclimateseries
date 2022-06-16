@@ -31,14 +31,14 @@ export class BoschApi {
     }
 
     async apiCall(endpoint: String, httpMethod: String, body: {} | null = null, retries: number = 1): Promise<any> {
-        this.log.debug("Getting token from cache");
+        this.log.trace("Getting token from cache");
         let token: Token = await storage.getItem(Constants.JWT_TOKEN_CACHE_KEY)
         if (!token) {
-            this.log.debug(`Adding token to cache`)
+            this.log.trace(`Adding token to cache`)
             await storage.setItem(Constants.JWT_TOKEN_CACHE_KEY, this.token)
             token = this.token
         } else {
-            this.log.debug(`Got token from cache`);
+            this.log.trace(`Got token from cache`);
         }
         return fetch(endpoint.valueOf(), {
             method: httpMethod.valueOf(),
@@ -76,9 +76,9 @@ export class BoschApi {
     }
 
     private async refreshToken(endpoint: String, httpMethod: String): Promise<any> {
-        this.log.debug("Calling refresh token api")
+        this.log.trace("Calling refresh token api")
         let token: Token = await storage.getItem(Constants.JWT_TOKEN_CACHE_KEY)
-        this.log.debug(`Got refresh token from cache`)
+        this.log.trace(`Got refresh token from cache`)
         let details = {
             'refresh_token': token.refresh_token,
             'grant_type': 'refresh_token'

@@ -6,9 +6,10 @@ import {DataManager} from "../util/DataManager";
 import {CustomLogger} from "../util/CustomLogger";
 
 export class ApplianceService {
-    private standardFunctions: StandardFunctions | null = null
-    private shouldRefreshStandardFunctions: boolean = true;
+    private standardFunctions: Map<string, StandardFunctions> = new Map<string, StandardFunctions>();
+    private shouldRefreshStandardFunctions: Map<string, boolean> = new Map<string, boolean>();
     private lastRefreshDate = new Date();
+    private isRequestOngoing: boolean = false;
 
     private boschApi: BoschApi;
     private log: CustomLogger;
@@ -24,10 +25,12 @@ export class ApplianceService {
                 if (value) {
                     return value.references.filter(e => e.id === '/airConditioning/acControl')[0];
                 }
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
             .catch(error => {
                 this.log.error(`Cannot find roomTemperature as the standard functions is null with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
     }
@@ -38,10 +41,12 @@ export class ApplianceService {
                 if (value) {
                     return value.references.filter(e => e.id === '/airConditioning/roomTemperature')[0];
                 }
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
             .catch(error => {
                 this.log.error(`Cannot find roomTemperature as the standard functions is null with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
     }
@@ -52,10 +57,12 @@ export class ApplianceService {
                 if (value) {
                     return value.references.filter(e => e.id === '/airConditioning/operationMode')[0];
                 }
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
             .catch(error => {
                 this.log.error(`Cannot find current operation mode as the standard functions is null with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
     }
@@ -66,10 +73,12 @@ export class ApplianceService {
                 if (value) {
                     return value.references.filter(e => e.id === '/airConditioning/temperatureSetpoint')[0];
                 }
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
             .catch(error => {
                 this.log.error(`Cannot find current temperature set point as the standard functions is null with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
     }
@@ -80,42 +89,89 @@ export class ApplianceService {
                 if (value) {
                     return value.references.filter(e => e.id === '/airConditioning/fanSpeed')[0];
                 }
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
             .catch(error => {
                 this.log.error(`Cannot find current fan speed as the standard functions is null with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
+                return null;
+            })
+    }
+
+    retrieveAirFlowVertical(gatewayId: string) {
+        return this.retrieveStandardFunctions(gatewayId)
+            .then(value => {
+                if (value) {
+                    return value.references.filter(e => e.id === '/airConditioning/airFlowVertical')[0];
+                }
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
+                return null;
+            })
+            .catch(error => {
+                this.log.error(`Cannot find current air flow vertical as the standard functions is null with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
+                return null;
+            })
+    }
+
+    retrieveAirFlowHorizontal(gatewayId: string) {
+        return this.retrieveStandardFunctions(gatewayId)
+            .then(value => {
+                if (value) {
+                    return value.references.filter(e => e.id === '/airConditioning/airFlowHorizontal')[0];
+                }
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
+                return null;
+            })
+            .catch(error => {
+                this.log.error(`Cannot find current air flow horizontal as the standard functions is null with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 return null;
             })
     }
 
     private async retrieveStandardFunctions(gatewayId: string) {
-        if(!this.shouldRefreshData()) {
-            return this.standardFunctions
+        if(!this.shouldRefreshData(gatewayId)) {
+            this.log.trace(`Returning this.standardFunctions.get(${gatewayId}) from memory`);
+            return this.standardFunctions.get(gatewayId);
         }
-        return await this.callStandardFunctionsApi(gatewayId)
+        this.log.trace(`Calling await this.callStandardFunctionsApi(${gatewayId})`);
+
+        return await this.callStandardFunctionsApi(gatewayId);
     }
 
-    private shouldRefreshData(): boolean {
-        return this.shouldRefreshStandardFunctions || this.standardFunctions === null || (Math.abs(this.lastRefreshDate.getTime() - new Date().getTime()) >= DataManager.refreshIntervalMillis)
+    private retrieveCurrentState(gatewayId: string, feature: string): string | null | undefined {
+        return this.standardFunctions &&
+            this.standardFunctions.get(gatewayId) &&
+            this.standardFunctions.get(gatewayId)!.references.filter(e => e.id === feature)[0].value.valueOf();
     }
 
-    private callStandardFunctionsApi(gatewayId: string) {
+    private shouldRefreshData(gatewayId: string): boolean {
+        return this.shouldRefreshStandardFunctions.get(gatewayId) == undefined ||
+            this.shouldRefreshStandardFunctions.get(gatewayId) ||
+            !this.standardFunctions ||
+            !this.standardFunctions.get(gatewayId) ||
+            (Math.abs(this.lastRefreshDate.getTime() - new Date().getTime()) >= DataManager.refreshIntervalMillis);
+    }
+
+    private callStandardFunctionsApi(gatewayId: string): Promise<StandardFunctions | undefined> {
         const endpoint = `${Constants.baseEndpoint}${gatewayId}${Constants.currentRoomTemperature}`
         return this.boschApi.apiCall(endpoint, 'GET')
             .then(value => value.json().catch(error => {
                 this.log.debug(`Failed to unpack the json from api with error ${error}`)
             }))
             .then(value => {
-                this.standardFunctions = value as StandardFunctions;
-                this.shouldRefreshStandardFunctions = false;
+                this.standardFunctions.set(gatewayId, value as StandardFunctions);
+                this.shouldRefreshStandardFunctions.set(gatewayId, false);
                 this.lastRefreshDate = new Date();
-                return this.standardFunctions
+                return this.standardFunctions.get(gatewayId);
             })
             .catch(error => {
                 this.log.error(`Failed to retrieve the standard functions from api ${endpoint} with error ${error}`)
-                this.shouldRefreshStandardFunctions = true
-                this.standardFunctions = null
-                return this.standardFunctions
+                this.shouldRefreshStandardFunctions.set(gatewayId, true);
+                this.standardFunctions = new Map<string, StandardFunctions>()
+                return undefined
             })
     }
 
@@ -123,7 +179,8 @@ export class ApplianceService {
      * Turns the device on/off
      */
      changeDeviceState(desiredState: string, serialNumber: string) {
-         if (this.standardFunctions && this.standardFunctions.references.filter(e => e.id === '/airConditioning/acControl')[0].value.valueOf() === desiredState) {
+         const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/acControl');
+         if (currentState && currentState === desiredState) {
              this.log.debug(`Will not change the device state to ${desiredState} as it already is in this state`)
              return new Promise<string>(resolve => desiredState)
          }
@@ -132,8 +189,8 @@ export class ApplianceService {
         const body = JSON.stringify({"value": desiredState})
         return this.boschApi.apiCall(endpoint, 'PUT', body)
             .then(response => {
-                this.shouldRefreshStandardFunctions = true;
-                this.standardFunctions = null;
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                this.standardFunctions.delete(serialNumber);
                 this.log.debug(`Device ${serialNumber} state switched to ${desiredState}`)
                 if (response.status === 204) {
                     return desiredState
@@ -143,6 +200,7 @@ export class ApplianceService {
             })
             .catch(error => {
                 this.log.error(`Failed to change state to ${desiredState} for device ${serialNumber} with error ${error}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
                 return desiredState === 'on' ? "off" : "on";
             })
     }
@@ -151,7 +209,8 @@ export class ApplianceService {
      * Changes the device operation mode to the one set in home app
      */
     changeOperationMode(value: string, serialNumber: string) {
-        if (this.standardFunctions && this.standardFunctions.references.filter(e => e.id === '/airConditioning/operationMode')[0].value.valueOf() === value) {
+        const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/operationMode');
+        if (currentState && currentState === value) {
             this.log.debug(`Will not change the device operation mode to ${value} as it already is in this state`)
             return new Promise<string>(resolve => value)
         }
@@ -162,8 +221,8 @@ export class ApplianceService {
         return this.boschApi.apiCall(endpoint, 'PUT', body)
             .then(response => {
                 this.log.debug(`Device ${serialNumber} operation mode switched to ${value}`)
-                this.shouldRefreshStandardFunctions = true;
-                this.standardFunctions = null;
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                this.standardFunctions.delete(serialNumber);
 
                 if (response.status === 204) {
                     return value
@@ -173,12 +232,14 @@ export class ApplianceService {
             })
             .catch(error => {
                 this.log.error(`Failed to change operation mode to ${value} for device ${serialNumber} with error ${JSON.stringify(error)}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
                 return null;
             })
     }
 
     setTemperatureSetPoint(value: number, serialNumber: string) {
-        if (this.standardFunctions && this.standardFunctions.references.filter(e => e.id === '/airConditioning/temperatureSetpoint')[0].value.valueOf() === value.toFixed(1)) {
+        const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/temperatureSetpoint');
+        if (currentState && currentState === value.toFixed(1)) {
             this.log.debug(`Will not change the device temperature set point to ${value} as it already is in this state`)
             return new Promise<number>(() => value)
         }
@@ -189,8 +250,8 @@ export class ApplianceService {
         return this.boschApi.apiCall(endpoint, 'PUT', body)
             .then(response => {
                 this.log.debug(`Device ${serialNumber} temperature set point switched to ${value}`)
-                this.shouldRefreshStandardFunctions = true;
-                this.standardFunctions = null;
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                this.standardFunctions.delete(serialNumber);
 
                 if (response.status === 204) {
                     return value
@@ -200,12 +261,14 @@ export class ApplianceService {
             })
             .catch(error => {
                 this.log.error(`Failed to change temperature set point to ${value} for device ${serialNumber} with error ${JSON.stringify(error)}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
                 return null;
             })
     }
 
     setFanSpeed(value: string, serialNumber: string) {
-        if (this.standardFunctions && this.standardFunctions.references.filter(e => e.id === '/airConditioning/fanSpeed')[0].value.valueOf() === value) {
+        const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/fanSpeed');
+        if (currentState && currentState === value) {
             this.log.debug(`Will not change the device fan speed to ${value} as it already is in this state`)
             return new Promise<string>(() => value)
         }
@@ -216,8 +279,8 @@ export class ApplianceService {
         return this.boschApi.apiCall(endpoint, 'PUT', body)
             .then(response => {
                 this.log.debug(`Device ${serialNumber} fan speed switched to ${value}`)
-                this.shouldRefreshStandardFunctions = true;
-                this.standardFunctions = null;
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                this.standardFunctions.delete(serialNumber);
 
                 if (response.status === 204) {
                     return value
@@ -227,6 +290,65 @@ export class ApplianceService {
             })
             .catch(error => {
                 this.log.error(`Failed to change fan speed to ${value} for device ${serialNumber} with error ${JSON.stringify(error)}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                return null;
+            })
+    }
+
+    setAirFlowVertical(value: string, serialNumber: string) {
+        const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/airFlowVertical');
+        if (currentState && currentState === value) {
+            this.log.debug(`Will not change the device ${serialNumber} air flow vertical to ${value} as it already is in this state`)
+            return new Promise<string>(() => value)
+        }
+
+        const endpoint = `${Constants.baseEndpoint}${serialNumber}${Constants.airFlowVerticalEndpoint}`
+        const body = JSON.stringify({"value": value.toLowerCase()})
+        this.log.debug(`Calling ${endpoint} with body ${body}`)
+        return this.boschApi.apiCall(endpoint, 'PUT', body)
+            .then(response => {
+                this.log.debug(`Device ${serialNumber} air flow vertical switched to ${value}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                this.standardFunctions.delete(serialNumber);
+
+                if (response.status === 204) {
+                    return value
+                } else {
+                    return null;
+                }
+            })
+            .catch(error => {
+                this.log.error(`Failed to change air flow vertical to ${value} for device ${serialNumber} with error ${JSON.stringify(error)}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                return null;
+            })
+    }
+
+    setAirFlowHorizontal(value: string, serialNumber: string) {
+        const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/airFlowHorizontal');
+        if (currentState && currentState === value) {
+            this.log.debug(`Will not change the device ${serialNumber} air flow horizontal to ${value} as it already is in this state`)
+            return new Promise<string>(() => value)
+        }
+
+        const endpoint = `${Constants.baseEndpoint}${serialNumber}${Constants.airFlowHorizontalEndpoint}`
+        const body = JSON.stringify({"value": value.toLowerCase()})
+        this.log.debug(`Calling ${endpoint} with body ${body}`)
+        return this.boschApi.apiCall(endpoint, 'PUT', body)
+            .then(response => {
+                this.log.debug(`Device ${serialNumber} air flow horizontal switched to ${value}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
+                this.standardFunctions?.delete(serialNumber);
+
+                if (response.status === 204) {
+                    return value
+                } else {
+                    return null;
+                }
+            })
+            .catch(error => {
+                this.log.error(`Failed to change air flow horizontal to ${value} for device ${serialNumber} with error ${JSON.stringify(error)}`)
+                this.shouldRefreshStandardFunctions.set(serialNumber, true);
                 return null;
             })
     }

@@ -10,4 +10,6 @@ export class Constants {
     public static readonly operationModeEndpoint: string = '/resource/airConditioning/operationMode'
     public static readonly temperatureSetPointEndpoint: string = '/resource/airConditioning/temperatureSetpoint'
     public static readonly fanSpeedEndpoint: string = '/resource/airConditioning/fanSpeed'
+    public static readonly airFlowVerticalEndpoint: string = '/resource/airConditioning/airFlowVertical'
+    public static readonly airFlowHorizontalEndpoint: string = '/resource/airConditioning/airFlowHorizontal'
 }
