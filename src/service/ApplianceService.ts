@@ -8,8 +8,8 @@ import {CustomLogger} from "../util/CustomLogger";
 export class ApplianceService {
     private standardFunctions: Map<string, StandardFunctions> = new Map<string, StandardFunctions>();
     private shouldRefreshStandardFunctions: Map<string, boolean> = new Map<string, boolean>();
-    private lastRefreshDate = new Date();
-    private isRequestOngoing: boolean = false;
+    private lastRefreshDate: Map<string, Date> = new Map<string, Date>();
+    private isRequestOngoing: Map<string, boolean> = new Map<string, boolean>();
 
     private boschApi: BoschApi;
     private log: CustomLogger;
@@ -132,7 +132,23 @@ export class ApplianceService {
     }
 
     private async retrieveStandardFunctions(gatewayId: string) {
-        if(!this.shouldRefreshData(gatewayId)) {
+        let retrieveState: boolean = true;
+        try {
+            retrieveState = this.shouldRefreshData(gatewayId);
+            this.log.trace("shouldRefreshData(%s) = %s", gatewayId, retrieveState);
+            if (retrieveState && this.isRequestOngoing != null && this.isRequestOngoing.get(gatewayId) != null && this.isRequestOngoing.get(gatewayId)) {
+                this.log.trace("A request for getting the device %s current state is on going. Delay for 1000ms", gatewayId);
+
+                await new Promise(resolve => setTimeout(resolve, 1000)).then(() => this.log.trace("Done waiting for getting device %s state", gatewayId));
+
+                retrieveState = this.shouldRefreshData(gatewayId);
+            }
+        } catch (e) {
+            this.log.error("Failed to get shouldRefreshData(%s), proceeding to request the data from server", gatewayId);
+            retrieveState = true;
+        }
+
+        if(!retrieveState) {
             this.log.trace(`Returning this.standardFunctions.get(${gatewayId}) from memory`);
             return this.standardFunctions.get(gatewayId);
         }
@@ -148,15 +164,20 @@ export class ApplianceService {
     }
 
     private shouldRefreshData(gatewayId: string): boolean {
+        this.log.debug("%s millis since last refresh for %s", !this.lastRefreshDate.get(gatewayId) ? "not refreshed yet" : Math.abs(this.lastRefreshDate.get(gatewayId)!.getTime() - new Date().getTime()), gatewayId);
+        this.log.debug("%s refresh interval for %s", DataManager.refreshIntervalMillis, gatewayId);
         return this.shouldRefreshStandardFunctions.get(gatewayId) == undefined ||
             this.shouldRefreshStandardFunctions.get(gatewayId) ||
             !this.standardFunctions ||
             !this.standardFunctions.get(gatewayId) ||
-            (Math.abs(this.lastRefreshDate.getTime() - new Date().getTime()) >= DataManager.refreshIntervalMillis);
+            !this.lastRefreshDate.get(gatewayId) ||
+            (Math.abs(this.lastRefreshDate.get(gatewayId)!.getTime() - new Date().getTime()) >= DataManager.refreshIntervalMillis);
     }
 
     private callStandardFunctionsApi(gatewayId: string): Promise<StandardFunctions | undefined> {
+        this.isRequestOngoing.set(gatewayId, true);
         const endpoint = `${Constants.baseEndpoint}${gatewayId}${Constants.currentRoomTemperature}`
+        this.log.trace("A request for %s is ongoing this.isRequestOngoing=%s", endpoint, this.isRequestOngoing);
         return this.boschApi.apiCall(endpoint, 'GET')
             .then(value => value.json().catch(error => {
                 this.log.debug(`Failed to unpack the json from api with error ${error}`)
@@ -164,7 +185,7 @@ export class ApplianceService {
             .then(value => {
                 this.standardFunctions.set(gatewayId, value as StandardFunctions);
                 this.shouldRefreshStandardFunctions.set(gatewayId, false);
-                this.lastRefreshDate = new Date();
+                this.lastRefreshDate.set(gatewayId, new Date());
                 return this.standardFunctions.get(gatewayId);
             })
             .catch(error => {
@@ -173,6 +194,10 @@ export class ApplianceService {
                 this.standardFunctions = new Map<string, StandardFunctions>()
                 return undefined
             })
+            .finally(() => {
+                this.isRequestOngoing.set(gatewayId, false);
+                this.log.trace("The request for %s finished this.isRequestOngoing=%s", endpoint, this.isRequestOngoing);
+            });
     }
 
     /**
