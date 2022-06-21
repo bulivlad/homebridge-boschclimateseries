@@ -148,7 +148,7 @@ export class ApplianceService {
             retrieveState = true;
         }
 
-        if(!retrieveState) {
+        if (!retrieveState) {
             this.log.trace(`Returning this.standardFunctions.get(${gatewayId}) from memory`);
             return this.standardFunctions.get(gatewayId);
         }
@@ -189,7 +189,7 @@ export class ApplianceService {
                 return this.standardFunctions.get(gatewayId);
             })
             .catch(error => {
-                this.log.error(`Failed to retrieve the standard functions from api ${endpoint} with error ${error}`)
+                this.log.error(`Failed to retrieve the standard functions from api ${endpoint} with error ${JSON.stringify(error)}`)
                 this.shouldRefreshStandardFunctions.set(gatewayId, true);
                 this.standardFunctions = new Map<string, StandardFunctions>()
                 return undefined
@@ -203,12 +203,12 @@ export class ApplianceService {
     /**
      * Turns the device on/off
      */
-     changeDeviceState(desiredState: string, serialNumber: string) {
-         const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/acControl');
-         if (currentState && currentState === desiredState) {
-             this.log.debug(`Will not change the device state to ${desiredState} as it already is in this state`)
-             return new Promise<string>(resolve => desiredState)
-         }
+    changeDeviceState(desiredState: string, serialNumber: string) {
+        const currentState = this.retrieveCurrentState(serialNumber, '/airConditioning/acControl');
+        if (currentState && currentState === desiredState) {
+            this.log.debug(`Will not change the device state to ${desiredState} as it already is in this state`)
+            return new Promise<string>(resolve => desiredState)
+        }
 
         const endpoint = `${Constants.baseEndpoint}${serialNumber}${Constants.powerStateEndpoint}`
         const body = JSON.stringify({"value": desiredState})

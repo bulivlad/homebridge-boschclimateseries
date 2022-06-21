@@ -1,7 +1,7 @@
 export class FunctionsReferences {
-    private _id: String;
-    private _type: String;
-    private _value: String;
+    private readonly _id: String;
+    private readonly _type: String;
+    private readonly _value: String;
 
 
     constructor(id: String, type: String, value: String) {

@@ -1,9 +1,9 @@
 import {FunctionsReferences} from "./FunctionsReferences";
 
 export class StandardFunctions {
-    private _id: String;
-    private _type: String;
-    private _references: FunctionsReferences[];
+    private readonly _id: String;
+    private readonly _type: String;
+    private readonly _references: FunctionsReferences[];
 
     constructor(id: String, type: String, references: FunctionsReferences[]) {
         this._id = id;

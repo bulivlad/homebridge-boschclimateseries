@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import {existsSync, readFileSync} from 'fs';
 
 export function parseJson<T>(value: string, replacement: T): T {
     try {

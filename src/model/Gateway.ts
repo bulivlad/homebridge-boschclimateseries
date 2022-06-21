@@ -1,5 +1,5 @@
 export class Gateway {
-    private _deviceId: String
+    private readonly _deviceId: String
     private firmwareVersion: String | undefined
     private hardwareVersion: String | undefined
     private productId: String | undefined

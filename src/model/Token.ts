@@ -1,6 +1,6 @@
 export class Token {
-    private _access_token: String
-    private _refresh_token: String
+    private readonly _access_token: String
+    private readonly _refresh_token: String
 
     constructor(access_token: String, refresh_token: String) {
         this._access_token = access_token;

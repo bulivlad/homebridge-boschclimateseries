@@ -58,7 +58,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
     private readonly deviceNameMapping: Map<string, DeviceMapping>;
 
     private readonly applianceService: ApplianceService;
-    private readonly platformService : PlatformService;
+    private readonly platformService: PlatformService;
 
     private readonly currentTemperatureHandler: CurrentTemperatureHandler;
     private readonly activeHandler: ActiveHandler;
@@ -147,7 +147,7 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
         deviceService.getCharacteristic(hap.Characteristic.CurrentTemperature)
             .onGet(this.currentTemperatureHandler.onGetHandler(accessory));
         deviceService.getCharacteristic(hap.Characteristic.Name)
-            .onGet(async () => { return accessory.displayName; });
+            .onGet(async () => accessory.displayName);
         deviceService.getCharacteristic(hap.Characteristic.CoolingThresholdTemperature)
             .setProps(this.coolingThresholdTemperatureHandler.getProps())
             .onGet(this.coolingThresholdTemperatureHandler.onGetHandler(accessory))
@@ -173,7 +173,9 @@ export class BoschClimateSeriesDynamicPlatform implements DynamicPlatformPlugin 
             temperatureService.getCharacteristic(hap.Characteristic.CurrentTemperature)
                 .onGet(this.currentTemperatureHandler.onGetHandler(accessory))
             temperatureService.getCharacteristic(hap.Characteristic.Name)
-                .onGet(async () => { return "Temperature sensor"; })
+                .onGet(async () => {
+                    return "Temperature sensor";
+                })
         }
 
         informationService

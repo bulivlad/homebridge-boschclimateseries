@@ -43,7 +43,9 @@ export class SwingModeHandler {
             const stringValue = SwingModeMapper.mapToString(value);
             Promise.all([
                 this.applianceService.setAirFlowVertical(stringValue, accessory.context.serialNumber),
-                new Promise(resolve => setTimeout(resolve, 1000)).then(() => {return this.applianceService.setAirFlowHorizontal(stringValue, accessory.context.serialNumber)})])
+                new Promise(resolve => setTimeout(resolve, 1000)).then(() => {
+                    return this.applianceService.setAirFlowHorizontal(stringValue, accessory.context.serialNumber)
+                })])
                 .then(result => {
                     if (result[0] && result[1] && (result[0] === stringValue || result[1] === stringValue)) {
                         this.log.debug("Changed swing mode to %s for device %s", result, accessory.context.serialNumber);

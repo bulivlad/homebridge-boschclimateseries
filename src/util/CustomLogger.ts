@@ -1,38 +1,39 @@
-import type { Logger } from 'homebridge';
+import type {Logger} from 'homebridge';
 import {DataManager} from "./DataManager";
 
 export class CustomLogger {
     private readonly level: number;
+
     constructor(private logger: Logger, private readonly prefix: string | null = null) {
         logs = this;
         this.level = DataManager.loggingLevel;
     }
 
-    trace (message, ...parameters: any[]) {
+    trace(message, ...parameters: any[]) {
         if (this.level.valueOf() === 5) {
             this.logger.info(this.getMessage(message, this.prefix), ...parameters);
         }
     }
 
-    debug (message, ...parameters: any[]) {
+    debug(message, ...parameters: any[]) {
         if (this.level.valueOf() >= 4) {
             this.logger.debug(this.getMessage(message, this.prefix), ...parameters);
         }
     }
 
-    info (message, ...parameters: any[]) {
+    info(message, ...parameters: any[]) {
         if (this.level.valueOf() >= 3) {
             this.logger.info(this.getMessage(message, this.prefix), ...parameters);
         }
     }
 
-    warn (message, ...parameters: any[]) {
+    warn(message, ...parameters: any[]) {
         if (this.level.valueOf() >= 2) {
             this.logger.warn(this.getMessage(message, this.prefix), ...parameters);
         }
     }
 
-    error (message, ...parameters: any[]) {
+    error(message, ...parameters: any[]) {
         if (this.level.valueOf() >= 1) {
             this.logger.error(this.getMessage(message, this.prefix), ...parameters);
         }
