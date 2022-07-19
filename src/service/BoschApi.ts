@@ -12,6 +12,7 @@ export class BoschApi {
     private token: Token;
     private readonly log: CustomLogger;
     private readonly cacheDirectory: string;
+    private isRefreshTokenOngoing: boolean = false;
 
     constructor(token: Token, log: Logger, cacheDirectory: string) {
         this.cacheDirectory = cacheDirectory
@@ -31,6 +32,17 @@ export class BoschApi {
     }
 
     async apiCall(endpoint: String, httpMethod: String, body: {} | null = null, retries: number = 1): Promise<any> {
+        this.log.info(`Requesting ${endpoint}`);
+        await new Promise(resolve => {
+            if (this.isRefreshTokenOngoing) {
+                this.log.info(`Refresh token request is ongoing before requesting ${endpoint}. Waiting for 300ms`);
+                setTimeout(resolve, 300);
+            } else {
+                this.log.info("No refresh token request is ongoing. Skipping to request %s", endpoint);
+                resolve("");
+            }
+        }).then(() => this.log.trace("Refresh token promise finished"));
+
         this.log.trace("Getting token from cache");
         let token: Token = await storage.getItem(Constants.JWT_TOKEN_CACHE_KEY)
         if (!token) {
@@ -40,6 +52,7 @@ export class BoschApi {
         } else {
             this.log.trace(`Got token from cache`);
         }
+
         return fetch(endpoint.valueOf(), {
             method: httpMethod.valueOf(),
             headers: {
@@ -52,7 +65,8 @@ export class BoschApi {
                 this.log.debug(`Got response status ${response.status} for calling ${endpoint}`)
             }
             if (!(response.status >= 200 && response.status < 300)) {
-                this.log.warn(`Call to ${endpoint} failed with code ${response.status} for body ${JSON.stringify(response.body)}`)
+                this.log.warn(`Call to ${endpoint} failed with code ${response.status}`);
+                this.log.trace(`Call to ${endpoint} failed with code ${response.status} for body ${JSON.stringify(response.body)}`)
                 throw response
             }
             return response
@@ -63,8 +77,8 @@ export class BoschApi {
                 }
                 if (error.status === 401) {
                     this.log.warn("Expired JWT token. Trying to refresh!")
-                    return this.refreshToken(endpoint, httpMethod).then(response => {
-                        this.log.info(`Token refreshed! Refresh the call ${endpoint}!`)
+                    return this.refreshToken().then(() => {
+                        this.log.info(`Token refreshed! Refresh the call ${endpoint}`)
                         return this.apiCall(endpoint, httpMethod, null, retries - 1)
                     }).catch(error => {
                         throw new Error(error)
@@ -75,7 +89,8 @@ export class BoschApi {
             })
     }
 
-    private async refreshToken(endpoint: String, httpMethod: String): Promise<any> {
+    private async refreshToken(): Promise<any> {
+        this.isRefreshTokenOngoing = true;
         this.log.trace("Calling refresh token api")
         let token: Token = await storage.getItem(Constants.JWT_TOKEN_CACHE_KEY)
         this.log.trace(`Got refresh token from cache`)
@@ -115,8 +130,14 @@ export class BoschApi {
                 return response
             })
             .catch(error => {
-                this.log.error(`Failed to refresh token with error ${JSON.stringify(error.body)}`)
+                this.log.error(`Failed to refresh token with error status ${JSON.stringify(error.status)}`)
+                this.log.trace(`Failed to refresh token with error ${JSON.stringify(error.body)}`)
                 throw error
             })
+            .finally(() =>
+            {
+                this.log.info("Refresh token request not going");
+                this.isRefreshTokenOngoing = false
+            });
     }
 }
