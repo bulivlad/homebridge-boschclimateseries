@@ -4,6 +4,7 @@ import {Logger} from "homebridge";
 import {Constants} from "../util/Constants";
 import {DataManager} from "../util/DataManager";
 import {CustomLogger} from "../util/CustomLogger";
+import {Utils} from "../util/Utils";
 
 export class ApplianceService {
     private standardFunctions: Map<string, StandardFunctions> = new Map<string, StandardFunctions>();
@@ -177,7 +178,7 @@ export class ApplianceService {
     private callStandardFunctionsApi(gatewayId: string): Promise<StandardFunctions | undefined> {
         this.isRequestOngoing.set(gatewayId, true);
         const endpoint = `${Constants.baseEndpoint}${gatewayId}${Constants.currentRoomTemperature}`
-        this.log.trace("A request for %s is ongoing this.isRequestOngoing=%s", endpoint, JSON.stringify(this.isRequestOngoing));
+        this.log.trace(`A request for %s is ongoing this.isRequestOngoing=${Utils.mapToString(this.isRequestOngoing)}`, endpoint);
         return this.boschApi.apiCall(endpoint, 'GET')
             .then(value => value.json().catch(error => {
                 this.log.debug(`Failed to unpack the json from api with error ${error}`)
@@ -196,7 +197,7 @@ export class ApplianceService {
             })
             .finally(() => {
                 this.isRequestOngoing.set(gatewayId, false);
-                this.log.trace("The request for %s finished this.isRequestOngoing=%s", endpoint, JSON.stringify(this.isRequestOngoing));
+                this.log.trace(`The request for %s finished this.isRequestOngoing=${Utils.mapToString(this.isRequestOngoing)}`, endpoint);
             });
     }
 

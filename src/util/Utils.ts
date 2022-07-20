@@ -1,16 +1,8 @@
-import {existsSync, readFileSync} from 'fs';
-
-export function parseJson<T>(value: string, replacement: T): T {
-    try {
-        return <T>JSON.parse(value);
-    } catch (_error) {
-        return replacement;
+export class Utils {
+    static mapToString(map: Map<any, any>): String {
+        const string = Array
+            .from(map.entries(), ([k, v]) => `${k}: ${v}`)
+            .join(", ");
+        return "Map(" + string + ")";
     }
-}
-
-export function loadJson<T>(file: string, replacement: T): T {
-    if (!existsSync(file)) {
-        return replacement;
-    }
-    return parseJson<T>(readFileSync(file).toString(), replacement);
 }

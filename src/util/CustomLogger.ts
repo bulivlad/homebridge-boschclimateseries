@@ -41,7 +41,8 @@ export class CustomLogger {
 
     private getMessage(message: string, prefix: string | null): string {
         if (prefix) {
-            return prefix.concat(' - ', message);
+            // return '['.concat(prefix.concat(' - ', message));
+            return `[${new Date().getTime()}, ` + prefix.concat(' - ', message) + ']';
         }
         return message;
     }

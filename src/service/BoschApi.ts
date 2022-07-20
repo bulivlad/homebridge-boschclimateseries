@@ -32,7 +32,7 @@ export class BoschApi {
     }
 
     async apiCall(endpoint: String, httpMethod: String, body: {} | null = null, retries: number = 1): Promise<any> {
-        this.log.info(`Requesting ${endpoint}`);
+        this.log.trace(`Requesting ${endpoint}`);
         this.log.trace("Getting token from cache");
         let token: Token = await storage.getItem(Constants.JWT_TOKEN_CACHE_KEY)
         if (!token) {
@@ -82,7 +82,7 @@ export class BoschApi {
     private async refreshToken(): Promise<any> {
         if(this.isRefreshTokenOngoing) {
             return new Promise(resolve => {
-                this.log.info(`Refresh token request is ongoing. Waiting for 600ms`);
+                this.log.trace(`Refresh token request is ongoing. Waiting for 600ms`);
                 setTimeout(resolve, 600)
             });
         }
@@ -133,7 +133,7 @@ export class BoschApi {
             })
             .finally(() =>
             {
-                this.log.info("Refresh token request not going");
+                this.log.trace("Refresh token request not going");
                 this.isRefreshTokenOngoing = false
             });
     }
